@@ -1,12 +1,15 @@
 package com.tenniscourts.reservations;
 
+import com.tenniscourts.config.mapper.MapperConfig;
 import org.mapstruct.InheritInverseConfiguration;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.factory.Mappers;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", config = MapperConfig.class)
 public interface ReservationMapper {
 
+    ReservationMapper INSTANCE = Mappers.getMapper(ReservationMapper.class);
     Reservation map(ReservationDTO source);
 
     @InheritInverseConfiguration

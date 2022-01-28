@@ -1,4 +1,4 @@
-package com.tenniscourts.tenniscourts;
+package com.tenniscourts.admin;
 
 
 import com.tenniscourts.config.mapper.MapperConfig;
@@ -7,11 +7,12 @@ import org.mapstruct.Mapper;
 import org.mapstruct.factory.Mappers;
 
 @Mapper(componentModel = "spring", config = MapperConfig.class)
-public interface TennisCourtMapper {
-    TennisCourtMapper INSTANCE = Mappers.getMapper(TennisCourtMapper.class);
+public interface AdminMapper {
+    AdminMapper INSTANCE = Mappers.getMapper(AdminMapper.class);
 
-    TennisCourtDTO map(TennisCourt source);
+    AdminDto map(Admin source);
 
     @InheritInverseConfiguration
-    TennisCourt map(TennisCourtDTO source);
+    Admin map(AdminDto source);
 }
+

@@ -1,6 +1,11 @@
 package com.tenniscourts.reservations;
 
+import com.tenniscourts.admin.AdminRepository;
 import com.tenniscourts.exceptions.EntityNotFoundException;
+import com.tenniscourts.guests.Guest;
+import com.tenniscourts.guests.GuestRepository;
+import com.tenniscourts.schedules.Schedule;
+import com.tenniscourts.schedules.ScheduleRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -16,21 +21,47 @@ public class ReservationService {
 
     private final ReservationMapper reservationMapper;
 
+    private final GuestRepository guestRepository;
+
+    private final ScheduleRepository scheduleRepository;
+
+    private final AdminRepository adminRepository;
+
     public ReservationDTO bookReservation(CreateReservationRequestDTO createReservationRequestDTO) {
-        throw new UnsupportedOperationException();
+        BigDecimal value = new BigDecimal("10.00");
+        Reservation reservation = new Reservation();
+        Guest guest = guestRepository.findById(createReservationRequestDTO.getGuestId()).orElseThrow(() -> new EntityNotFoundException("GuestId was not found"));
+        reservation.setGuest(guest);
+        Schedule schedule = scheduleRepository.findById(createReservationRequestDTO.getScheduleId()).orElseThrow(() -> new EntityNotFoundException("ScheduleId was not found"));
+        reservation.setSchedule(schedule);
+        reservation.setValue(value);
+        reservationRepository.save(reservation);
+        try {
+
+            return reservationMapper.map(reservation);
+        } catch (UnsupportedOperationException e) {
+
+            throw new UnsupportedOperationException(e);
+        }
     }
 
-    public ReservationDTO findReservation(Long reservationId) {
-        return reservationRepository.findById(reservationId).map(reservationMapper::map).orElseThrow(() -> {
+    public ReservationDTO findReservation(Long guestId, Long reservationId) {
+        if (!guestRepository.findById(guestId).isPresent()) {
+            throw new EntityNotFoundException("GuestId was not found");
+        }
+        return reservationRepository.findById(reservationId).map(reservationMapper::map).<EntityNotFoundException>orElseThrow(() -> {
             throw new EntityNotFoundException("Reservation not found.");
         });
     }
 
-    public ReservationDTO cancelReservation(Long reservationId) {
-        return reservationMapper.map(this.cancel(reservationId));
+    public ReservationDTO cancelReservation(Long guestId, Long reservationId) {
+        return reservationMapper.map(this.cancel(guestId, reservationId));
     }
 
-    private Reservation cancel(Long reservationId) {
+    private Reservation cancel(Long guestId, Long reservationId) {
+        if (!guestRepository.findById(guestId).isPresent()) {
+            throw new EntityNotFoundException("GuestId was not found");
+        }
         return reservationRepository.findById(reservationId).map(reservation -> {
 
             this.validateCancellation(reservation);
@@ -38,7 +69,7 @@ public class ReservationService {
             BigDecimal refundValue = getRefundValue(reservation);
             return this.updateReservation(reservation, refundValue, ReservationStatus.CANCELLED);
 
-        }).orElseThrow(() -> {
+        }).<EntityNotFoundException>orElseThrow(() -> {
             throw new EntityNotFoundException("Reservation not found.");
         });
     }
@@ -62,19 +93,41 @@ public class ReservationService {
     }
 
     public BigDecimal getRefundValue(Reservation reservation) {
-        long hours = ChronoUnit.HOURS.between(LocalDateTime.now(), reservation.getSchedule().getStartDateTime());
-
-        if (hours >= 24) {
+        LocalDateTime actualDate = LocalDateTime.now();
+        long hours = ChronoUnit.HOURS.between(actualDate, reservation.getSchedule().getStartDateTime());
+        int hour = actualDate.getHour();
+        int minute = actualDate.getMinute();
+        if (hours >= 24)
             return reservation.getValue();
-        }
 
+        return reservationRefundValidate(reservation, hour, minute);
+
+    }
+
+    public BigDecimal reservationRefundValidate(Reservation reservation, int hour, int minute) {
+        if (hour >= 12 && minute >= 00 && hour <= 23 && minute <= 59) {
+            return new BigDecimal(25).divide(reservation.getValue());
+        } else if (hour >= 2 && minute >= 00 && hour <= 11 && minute <= 59) {
+            return new BigDecimal(50).divide(reservation.getValue());
+        } else if (hour >= 00 && minute >= 00 && hour <= 1 && minute <= 59) {
+            return new BigDecimal(75).divide(reservation.getValue());
+        }
         return BigDecimal.ZERO;
     }
 
-    /*TODO: This method actually not fully working, find a way to fix the issue when it's throwing the error:
-            "Cannot reschedule to the same slot.*/
-    public ReservationDTO rescheduleReservation(Long previousReservationId, Long scheduleId) {
-        Reservation previousReservation = cancel(previousReservationId);
+
+    public ReservationDTO rescheduleReservation(Long guestId, Long previousReservationId, Long scheduleId) {
+        if (!guestRepository.findById(guestId).isPresent()) {
+            throw new EntityNotFoundException("GuestId was not found");
+        }
+        Reservation previousReservation = cancel(guestId, previousReservationId);
+
+        Schedule schedule = new Schedule();
+        schedule.setTennisCourt(previousReservation.getSchedule().getTennisCourt());
+        schedule.setEndDateTime(previousReservation.getSchedule().getEndDateTime());
+        schedule.setStartDateTime(previousReservation.getSchedule().getStartDateTime());
+
+        previousReservation.setSchedule(schedule);
 
         if (scheduleId.equals(previousReservation.getSchedule().getId())) {
             throw new IllegalArgumentException("Cannot reschedule to the same slot.");
